@@ -1,0 +1,65 @@
+image: docker:24.0.7
+
+services:
+  - docker:24.0.7-dind
+
+variables:
+  DOCKER_DRIVER: overlay2
+  IMAGE_TAG: $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
+
+stages:
+  - build
+  - test
+  - push
+  - deploy
+
+before_script:
+  - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+
+build:
+  stage: build
+  script:
+    - docker build -t $IMAGE_TAG .
+  only:
+    - main
+
+test:
+  stage: test
+  image: php:8.2
+  services:
+    - mysql:8.0
+  variables:
+    DB_HOST: mysql
+    DB_DATABASE: akaunting_test
+    DB_USERNAME: root
+    DB_PASSWORD: akaunting
+  script:
+    - cp .env.example .env
+    - composer install
+    - php artisan key:generate
+    - php artisan migrate --force
+    - php artisan test
+  only:
+    - main
+
+push:
+  stage: push
+  script:
+    - docker push $IMAGE_TAG
+  only:
+    - main
+
+deploy:
+  stage: deploy
+  image: alpine:3.20
+  before_script:
+    - apk add --no-cache openssh
+  script:
+    - ssh -o StrictHostKeyChecking=no $DEPLOY_USER@$DEPLOY_SERVER "
+        docker pull $IMAGE_TAG &&
+        docker stop akaunting_app || true &&
+        docker rm akaunting_app || true &&
+        docker run -d --name akaunting_app -p 8000:8000 $IMAGE_TAG
+      "
+  only:
+    - main
