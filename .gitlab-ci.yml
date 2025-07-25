@@ -1,12 +1,14 @@
 image: docker:24.0.7
 
 services:
-  - docker:24.0.7-dind
+  - name: docker:24.0.7-dind
+    command: ["--tls=false"]
 
 variables:
   DOCKER_DRIVER: overlay2
   IMAGE_TAG: $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
   DOCKER_TLS_CERTDIR: ""
+
 stages:
   - build
   - test
