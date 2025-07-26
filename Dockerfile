@@ -1,42 +1,44 @@
-FROM php:8.2-fpm
+FROM php:8.1-cli
 
 # Установка системных зависимостей
 RUN apt-get update && apt-get install -y \
+    unzip \
     git \
     curl \
-    zip \
-    unzip \
-    libpng-dev \
-    libonig-dev \
-    libxml2-dev \
     libzip-dev \
+    libpng-dev \
+    libxml2-dev \
+    libonig-dev \
     libicu-dev \
-    npm \
-    openssh-client \
-    && apt-get clean
-
-# Установка PHP расширений
-RUN docker-php-ext-install pdo_mysql mbstring exif pcntl bcmath gd zip intl
+    zlib1g-dev \
+    libcurl4-openssl-dev \
+    libgd-dev \
+    && docker-php-ext-install \
+    bcmath \
+    curl \
+    zip \
+    gd \
+    intl \
+    dom \
+    xml
 
 # Установка Composer
-COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
+COPY --from=composer:2.2 /usr/bin/composer /usr/bin/composer
 
-# Рабочая директория
+# Установка рабочей директории
 WORKDIR /var/www
 
-# Копируем только composer.* для кэширования зависимостей
-COPY app/composer.json app/composer.lock ./
+# Копируем только composer.json для кэширования зависимостей
+COPY ./app/composer.json .
 
-# Настройка зеркала и таймаута для РФ
-RUN composer config -g repos.packagist composer https://mirrors.cloud.tencent.com/composer/ && \
-    composer config -g process-timeout 1800 && \
-    composer install --no-interaction --prefer-dist --optimize-autoloader
+# Установка зависимостей (если composer.lock нет — он будет создан)
+RUN composer install --no-dev --prefer-dist --no-interaction
 
-# Копируем всё приложение
-COPY ./app /var/www
+# Копируем остальные файлы
+COPY ./app .
 
-# Установка прав
-RUN chown -R www-data:www-data /var/www
+# Открыть порт (если нужно)
+EXPOSE 8000
 
-EXPOSE 9000
-CMD ["php-fpm"]
+# Команда по умолчанию
+CMD ["php", "artisan", "serve", "--host=0.0.0.0", "--port=8000"]
