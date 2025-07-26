@@ -6,12 +6,35 @@ services:
 variables:
   DOCKER_TLS_CERTDIR: ""
   IMAGE_TAG: "$CI_REGISTRY_IMAGE:latest"
+  DOCKER_HOST: tcp://docker:2375
 
 stages:
+  - prepare
   - build
+  - push
+
+before_script:
+  - apk add --no-cache git curl
+  - docker info
+
+prepare:
+  stage: prepare
+  script:
+    - echo "✅ Подготовка завершена"
 
 build:
   stage: build
   script:
-    - echo "Building docker image"
-    - docker build -t "$IMAGE_TAG" .
+    - echo "🐳 Сборка Docker-образа..."
+    - docker build --cache-from "$IMAGE_TAG" -t "$IMAGE_TAG" .
+  only:
+    - main
+
+push:
+  stage: push
+  script:
+    - echo "📤 Push образа в GitLab Registry"
+    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin $CI_REGISTRY
+    - docker push "$IMAGE_TAG"
+  only:
+    - main

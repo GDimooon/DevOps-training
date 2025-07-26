@@ -1,44 +1,38 @@
 FROM php:8.2-fpm
 
-# Установка зависимостей для PHP и Node
+# Установка зависимостей
 RUN apt-get update && apt-get install -y \
-    git \
-    curl \
-    zip \
-    unzip \
-    libpng-dev \
-    libonig-dev \
-    libxml2-dev \
-    libzip-dev \
-    libicu-dev \
-    npm \
-    openssh-client
+    git curl zip unzip \
+    libpng-dev libonig-dev libxml2-dev libzip-dev libicu-dev \
+    npm openssh-client \
+ && rm -rf /var/lib/apt/lists/*
 
-# Установка PHP расширений
+# Установка PHP-расширений
 RUN docker-php-ext-install pdo_mysql mbstring exif pcntl bcmath gd zip intl
 
-# Установка composer из composer:latest
-COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
+# Добавление composer из официального stage
+FROM composer:2.7 AS composer_stage
 
-# Установка mirrors для РФ и увеличение таймаута
-RUN composer config -g repos.packagist composer https://mirrors.cloud.tencent.com/composer/ && \
-    composer config -g process-timeout 1800
+FROM php:8.2-fpm
+
+COPY --from=composer_stage /usr/bin/composer /usr/bin/composer
 
 # Рабочая директория
 WORKDIR /var/www
 
-# Копируем код приложения
+# Копируем только composer файлы сначала (для кэширования)
+COPY composer.json composer.lock ./
+
+# Установка mirrors и зависимостей
+RUN composer config -g repos.packagist composer https://mirrors.cloud.tencent.com/composer/ && \
+    composer config -g process-timeout 1800 && \
+    composer install --no-interaction --prefer-dist --optimize-autoloader
+
+# Копируем остальной код
 COPY ./app /var/www
 COPY app/.env /var/www/.env
-RUN chown -R www-data:www-data /var/www
-# Установка зависимостей с использованием composer.lock, если он есть
-RUN if [ -f composer.lock ]; then \
-        composer install --no-interaction --prefer-dist --optimize-autoloader; \
-    else \
-        composer update --no-interaction --prefer-dist --optimize-autoloader; \
-    fi
 
-# Права на папку
+# Права
 RUN chown -R www-data:www-data /var/www
 
 EXPOSE 9000
